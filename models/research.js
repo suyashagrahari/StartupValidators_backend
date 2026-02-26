@@ -12,4 +12,6 @@ const ResearchSchema = new mongoose.Schema(
 
 ResearchSchema.index({ userId: 1, createdAt: -1 });
 
+console.log("ResearchSchema", ResearchSchema);
+
 module.exports = mongoose.models.Research || mongoose.model("Research", ResearchSchema);
