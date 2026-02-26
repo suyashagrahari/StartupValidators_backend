@@ -80,7 +80,19 @@ function logToConsole(data) {
   }
 }
 
-app.use(cors({ origin: ["http://localhost:3000", "http://127.0.0.1:3000"] }));
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",").map((v) => v.trim()).filter(Boolean) : []),
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+}));
 app.use(express.json());
 
 async function saveResearchForUser(userId, idea, description, result) {
