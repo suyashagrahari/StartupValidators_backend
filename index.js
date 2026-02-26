@@ -80,19 +80,38 @@ function logToConsole(data) {
   }
 }
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",").map((v) => v.trim()).filter(Boolean) : []),
-];
+function normalizeOrigin(origin) {
+  return String(origin || "").trim().replace(/\/+$/, "").toLowerCase();
+}
 
-app.use(cors({
+const allowedOrigins = new Set(
+  [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    ...(process.env.CORS_ORIGINS
+      ? process.env.CORS_ORIGINS.split(",").map((v) => v.trim()).filter(Boolean)
+      : []),
+  ].map(normalizeOrigin)
+);
+
+const corsOptions = {
   origin(origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked for origin: ${origin}`));
+
+    const normalized = normalizeOrigin(origin);
+    const isRailwayPublicDomain = normalized.endsWith(".up.railway.app");
+
+    if (allowedOrigins.has(normalized) || isRailwayPublicDomain) {
+      return callback(null, true);
+    }
+
+    console.warn(`[cors] blocked origin: ${origin}`);
+    return callback(null, false);
   },
-}));
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 
 async function saveResearchForUser(userId, idea, description, result) {
