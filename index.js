@@ -80,34 +80,10 @@ function logToConsole(data) {
   }
 }
 
-function normalizeOrigin(origin) {
-  return String(origin || "").trim().replace(/\/+$/, "").toLowerCase();
-}
-
-const allowedOrigins = new Set(
-  [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    ...(process.env.CORS_ORIGINS
-      ? process.env.CORS_ORIGINS.split(",").map((v) => v.trim()).filter(Boolean)
-      : []),
-  ].map(normalizeOrigin)
-);
-
 const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-
-    const normalized = normalizeOrigin(origin);
-    const isRailwayPublicDomain = normalized.endsWith(".up.railway.app");
-
-    if (allowedOrigins.has(normalized) || isRailwayPublicDomain) {
-      return callback(null, true);
-    }
-
-    console.warn(`[cors] blocked origin: ${origin}`);
-    return callback(null, false);
-  },
+  origin: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
