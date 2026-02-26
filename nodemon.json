@@ -1,0 +1,18 @@
+{
+  "watch": [
+    "index.js",
+    "auth.js",
+    "db.js",
+    "agent/**/*.js",
+    "services/**/*.js",
+    "models/**/*.js"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "node_modules/**",
+    ".git/**",
+    "*.log",
+    ".env.example"
+  ],
+  "delay": "300"
+}
