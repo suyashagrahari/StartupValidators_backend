@@ -82,40 +82,57 @@ function createResearchGraph(emit) {
   }
 
   async function runSingleTavilyResearch(idea) {
-    const query = `Startup market research for "${idea}": TAM/SAM, top competitors, funding activity, customer pain points, growth trends`;
-    let webSources = [];
-    let webSummary = "";
+    // tvly.research() is async (returns only a requestId when stream:false).
+    // Instead, run parallel tvly.search() calls which return sources immediately.
+    const searchQueries = [
+      `${idea} market size TAM startup landscape 2025`,
+      `${idea} competitors alternatives funding investors`,
+      `${idea} customer pain points use cases target market`,
+      `${idea} growth trends industry report`,
+    ];
 
-    try {
-      const res = await Promise.race([
-        tvly.research(query, {
-          model: "mini",
-          stream: false,
-          citationFormat: "numbered",
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("research timeout")), 20000)),
-      ]);
+    let allSources = [];
+    const answers = [];
 
-      webSources = res?.sources || [];
-      webSummary = typeof res?.content === "string"
-        ? res.content
-        : typeof res?.summary === "string"
-          ? res.summary
-          : "";
-    } catch (err) {
-      emit({ type: "warn", ts: ts(), msg: `  ⚠ Tavily request failed: ${err.message.slice(0, 60)}` });
+    emit({ type: "info", ts: ts(), msg: `  ⚡ Running ${searchQueries.length} parallel Tavily web searches...` });
+
+    const settled = await Promise.allSettled(
+      searchQueries.map((q) =>
+        Promise.race([
+          tvly.search(q, { maxResults: 7, includeAnswer: true, searchDepth: "advanced" }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 25000)),
+        ])
+      )
+    );
+
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
+      if (r.status === "fulfilled" && r.value) {
+        const results = r.value.results || [];
+        allSources.push(...results);
+        if (r.value.answer) answers.push(`**${searchQueries[i]}**\n${r.value.answer}`);
+        emit({ type: "info", ts: ts(), msg: `  ✓ Search ${i + 1}: ${results.length} sources` });
+      } else if (r.status === "rejected") {
+        emit({ type: "warn", ts: ts(), msg: `  ⚠ Search ${i + 1} failed: ${r.reason?.message?.slice(0, 50)}` });
+      }
     }
 
+    // Deduplicate by URL
     const seen = new Set();
-    const uniqueSources = webSources.filter((s) => {
+    const uniqueSources = allSources.filter((s) => {
       if (!s.url || seen.has(s.url)) return false;
       seen.add(s.url);
       return true;
     });
 
+    // Build summary from search answers
+    const webSummary = answers.join("\n\n") || "";
+
+    emit({ type: "info", ts: ts(), msg: `  ✓ Tavily complete: ${uniqueSources.length} unique sources from ${answers.length} answered queries` });
+
     return {
       searchResults: [],
-      sources: uniqueSources.slice(0, 8),
+      sources: uniqueSources.slice(0, 15),
       summary: webSummary,
       sourceCount: uniqueSources.length,
     };
@@ -408,6 +425,9 @@ function createResearchGraph(emit) {
     const funderStr  = userSummary(state.funderData?.profileInvestors || []);
     const commStr    = tweetSummary(state.communityData?.tweets || [], 5);
     const webSummary = state.tavilyData?.summary?.slice(0, 3000) || "N/A";
+    const webSourcesList = (state.tavilyData?.sources || []).slice(0, 10)
+      .map((s, i) => `[${i + 1}] ${s.title || "Untitled"} — ${s.url}\n    ${(s.content || "").slice(0, 200)}`)
+      .join("\n") || "No sources available.";
 
     const bigPrompt = `You are a world-class startup analyst with deep expertise in market research, venture capital, and product strategy.
 
@@ -438,7 +458,11 @@ ${funderStr}
 ${commStr}
 
 ═══ WEB INTELLIGENCE (TAVILY) ═══
+Summary:
 ${webSummary}
+
+Sources:
+${webSourcesList}
 
 ═══ YOUR TASK ═══
 
